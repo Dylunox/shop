@@ -3,7 +3,177 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>متجر الشرائح الإلكترونية</title>
+    <title>صفحة العملاء - الباقات</title>
+    
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js';
+        import { getDatabase, ref, onValue, off, push } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCy8qUFOMQ6Yg93fEMIYj6ofn8l_4p7AgI",
+            authDomain: "shop-64193.firebaseapp.com",
+            databaseURL: "https://shop-64193-default-rtdb.firebaseio.com",
+            projectId: "shop-64193",
+            storageBucket: "shop-64193.firebasestorage.app",
+            messagingSenderId: "767217207595",
+            appId: "1:767217207595:web:f80c97ff4a085d8637dd6e",
+            measurementId: "G-N1Q2W24LR9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        let unlimitedListener = null;
+        let gbListener = null;
+
+        // دالة لعرض إشعار (Toast)
+        function showToast(message, type = 'error') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('show');
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            }, 100);
+        }
+
+        // تحميل الباقات من قاعدة البيانات
+        function loadPackages() {
+            const unlimitedRef = ref(database, 'packages/unlimited');
+            if (unlimitedListener) off(unlimitedRef, 'value', unlimitedListener);
+            unlimitedListener = onValue(unlimitedRef, (snapshot) => {
+                console.log('تحميل باقات غير محدودة:', snapshot.val());
+                let packages = snapshot.val();
+                const container = document.getElementById('unlimitedPackages');
+                
+                if (packages && !Array.isArray(packages)) {
+                    packages = Object.values(packages);
+                    console.log('تم تحويل packages/unlimited من كائن إلى مصفوفة:', packages);
+                }
+                
+                if (packages && Array.isArray(packages)) {
+                    container.innerHTML = '';
+                    packages.forEach((pkg, index) => {
+                        createPackageCard(pkg, container, index, 'unlimited');
+                    });
+                } else {
+                    container.innerHTML = '<div class="loading-spinner">لا توجد باقات متاحة</div>';
+                    console.log('لا توجد باقات غير محدودة أو البيانات غير صالحة');
+                }
+            }, (error) => {
+                console.error('خطأ في تحميل الباقات غير المحدودة:', error);
+                showToast('حدث خطأ في تحميل باقات غير المحدودة: ' + error.message, 'error');
+            });
+
+            const gbRef = ref(database, 'packages/gb');
+            if (gbListener) off(gbRef, 'value', gbListener);
+            gbListener = onValue(gbRef, (snapshot) => {
+                console.log('تحميل باقات الجيجابايت:', snapshot.val());
+                let packages = snapshot.val();
+                const container = document.getElementById('gbPackages');
+                
+                if (packages && !Array.isArray(packages)) {
+                    packages = Object.values(packages);
+                    console.log('تم تحويل packages/gb من كائن إلى مصفوفة:', packages);
+                }
+                
+                if (packages && Array.isArray(packages)) {
+                    container.innerHTML = '';
+                    packages.forEach((pkg, index) => {
+                        createPackageCard(pkg, container, index, 'gb');
+                    });
+                } else {
+                    container.innerHTML = '<div class="loading-spinner">لا توجد باقات متاحة</div>';
+                    console.log('لا توجد باقات جيجابايت أو البيانات غير صالحة');
+                }
+            }, (error) => {
+                console.error('خطأ في تحميل باقات الجيجابايت:', error);
+                showToast('حدث خطأ في تحميل باقات الجيجابايت: ' + error.message, 'error');
+            });
+        }
+
+        // إنشاء بطاقة باقة
+        function createPackageCard(pkg, container, index, type) {
+            const isAvailable = pkg.available === true;
+            const card = document.createElement('div');
+            card.className = 'package-card';
+            card.dataset.index = index;
+            card.dataset.type = type;
+            
+            card.innerHTML = `
+                <div class="package-title">${pkg.title}</div>
+                <div class="package-duration">${pkg.duration}</div>
+                <div class="package-price">${pkg.price} <span class="currency">ريال</span></div>
+                <button class="action-btn ${isAvailable ? '' : 'disabled'}" 
+                        ${isAvailable ? `onclick="orderPackage('${type}', ${index}, '${pkg.title}', '${pkg.price}', ${pkg.id})"` : 'disabled'}>
+                    ${isAvailable ? 'طلب' : '❌ غير متوفر'}
+                </button>
+            `;
+            
+            container.appendChild(card);
+        }
+
+        // فتح نافذة طلب الباقة
+        window.orderPackage = function(type, index, title, price, id) {
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h2>طلب الباقة</h2>
+                    <input type="text" id="phoneNumber" placeholder="أدخل رقم الهاتف">
+                    <div class="modal-buttons">
+                        <button class="modal-btn" onclick="confirmOrder(${id}, '${title}', '${price}', '${type}')">تأكيد</button>
+                        <button class="modal-btn cancel" onclick="this.closest('.modal').remove()">إلغاء</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // تأكيد الطلب
+        window.confirmOrder = function(id, title, price, type) {
+            const phone = document.getElementById('phoneNumber').value;
+            if (!phone || !/^\d+$/.test(phone)) {
+                showToast('يرجى إدخال رقم هاتف صحيح', 'error');
+                return;
+            }
+            
+            const order = {
+                packageId: id,
+                packageTitle: title,
+                price: price,
+                phone: phone,
+                type: type,
+                status: 'pending',
+                timestamp: new Date().toISOString()
+            };
+            
+            try {
+                push(ref(database, 'orders'), order).then(() => {
+                    console.log('تم إرسال الطلب:', order);
+                    showToast('تم إرسال طلبك بنجاح! سيتم التواصل معك قريبًا.', 'success');
+                    document.querySelector('.modal').remove();
+                }).catch((error) => {
+                    console.error('خطأ في إرسال الطلب:', error);
+                    showToast('حدث خطأ في إرسال الطلب: ' + error.message, 'error');
+                });
+            } catch (error) {
+                console.error('خطأ في إرسال الطلب:', error);
+                showToast('حدث خطأ في إرسال الطلب: ' + error.message, 'error');
+            }
+        }
+
+        // تحميل الباقات عند بدء الصفحة
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('تحميل الباقات عند بدء الصفحة');
+            loadPackages();
+        });
+    </script>
+    
     <style>
         * {
             margin: 0;
@@ -35,15 +205,6 @@
             font-size: 2.5rem;
             margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .header p {
-            font-size: 1.2rem;
-            opacity: 0.9;
-        }
-
-        .packages-section {
-            margin-bottom: 40px;
         }
 
         .section-title {
@@ -107,160 +268,130 @@
         }
 
         .package-price {
-            font-size: 2rem;
+            font-size: 1.5rem;
             font-weight: bold;
             color: #667eea;
             margin-bottom: 20px;
         }
 
         .package-price .currency {
-            font-size: 1.2rem;
+            font-size: 1rem;
             color: #666;
         }
 
-        .order-btn {
+        .action-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            font-size: 1.1rem;
+            padding: 10px 20px;
+            border-radius: 15px;
+            font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
-            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
         }
 
-        .order-btn:hover {
+        .action-btn:hover:not(.disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
 
-        .order-btn:active {
-            transform: translateY(0);
+        .action-btn.disabled {
+            background: #ccc;
+            cursor: not-allowed;
         }
 
-        /* Modal Styles */
         .modal {
-            display: none;
             position: fixed;
-            z-index: 1000;
-            left: 0;
             top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            backdrop-filter: blur(5px);
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
 
         .modal-content {
             background: white;
-            margin: 5% auto;
-            padding: 30px;
-            border-radius: 20px;
+            padding: 20px;
+            border-radius: 15px;
             width: 90%;
             max-width: 500px;
-            position: relative;
-            animation: modalSlideIn 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
 
-        @keyframes modalSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .close {
-            color: #aaa;
-            float: left;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            position: absolute;
-            top: 15px;
-            left: 20px;
-        }
-
-        .close:hover {
-            color: #000;
-        }
-
-        .modal h2 {
+        .modal-content h2 {
+            margin-bottom: 20px;
             text-align: center;
             color: #333;
-            margin-bottom: 20px;
-            font-size: 1.8rem;
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .form-group input {
+        .modal-content input {
             width: 100%;
-            padding: 12px 15px;
+            padding: 10px;
+            margin-bottom: 15px;
             border: 2px solid #ddd;
             border-radius: 10px;
             font-size: 1rem;
-            transition: border-color 0.3s ease;
         }
 
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
+        .modal-buttons {
+            display: flex;
+            justify-content: space-between;
         }
 
-        .form-group .optional {
-            color: #666;
-            font-size: 0.9rem;
-            font-weight: normal;
-        }
-
-        .pay-btn {
-            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+        .modal-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            transition: all 0.3s ease;
-            margin-top: 10px;
-        }
-
-        .pay-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(37, 211, 102, 0.4);
-        }
-
-        .selected-package {
-            background: rgba(102, 126, 234, 0.1);
-            padding: 15px;
+            padding: 10px 20px;
             border-radius: 10px;
-            margin-bottom: 20px;
-            text-align: center;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
 
-        .selected-package h3 {
-            color: #667eea;
-            margin-bottom: 5px;
+        .modal-btn.cancel {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
         }
 
-        /* Responsive Design */
+        .modal-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.success {
+            background: #4CAF50;
+        }
+
+        .toast.error {
+            background: #ff4444;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 15px;
@@ -270,10 +401,6 @@
                 font-size: 2rem;
             }
 
-            .header p {
-                font-size: 1rem;
-            }
-
             .packages-grid {
                 grid-template-columns: 1fr;
                 gap: 15px;
@@ -281,11 +408,6 @@
 
             .package-card {
                 padding: 20px;
-            }
-
-            .modal-content {
-                margin: 10% auto;
-                padding: 25px;
             }
 
             .section-title {
@@ -300,238 +422,34 @@
             }
 
             .package-price {
-                font-size: 1.8rem;
+                font-size: 1.3rem;
             }
 
             .modal-content {
                 width: 95%;
-                margin: 15% auto;
-                padding: 20px;
             }
-        }
-
-        /* Loading Animation */
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌐 متجر الشرائح الإلكترونية</h1>
-            <p>اختر الباقة المناسبة لك واستمتع بالإنترنت السريع</p>
+            <h1>📱 باقات الإنترنت</h1>
         </div>
 
-        <!-- Unlimited Packages Section -->
         <div class="packages-section">
-            <div class="section-title">
-                🌐 باقات غير محدودة
-            </div>
-            <div class="packages-grid">
-                <div class="package-card">
-                    <div class="package-title">باقة يوم واحد</div>
-                    <div class="package-duration">إنترنت غير محدود لمدة 24 ساعة</div>
-                    <div class="package-price">1.000 <span class="currency">ريال</span></div>
-                    <button class="order-btn" onclick="openModal('باقة يوم واحد - إنترنت غير محدود', '1.000 ريال')">طلب الآن</button>
-                </div>
-
-                <div class="package-card">
-                    <div class="package-title">باقة 10 أيام</div>
-                    <div class="package-duration">إنترنت غير محدود لمدة 10 أيام</div>
-                    <div class="package-price">4.000 <span class="currency">ريال</span></div>
-                    <button class="order-btn" onclick="openModal('باقة 10 أيام - إنترنت غير محدود', '4.000 ريال')">طلب الآن</button>
-                </div>
-
-                <div class="package-card">
-                    <div class="package-title">باقة 20 يوم</div>
-                    <div class="package-duration">إنترنت غير محدود لمدة 20 يوم</div>
-                    <div class="package-price">7.000 <span class="currency">ريال</span></div>
-                    <button class="order-btn" onclick="openModal('باقة 20 يوم - إنترنت غير محدود', '7.000 ريال')">طلب الآن</button>
-                </div>
+            <div class="section-title">باقات غير محدودة</div>
+            <div id="unlimitedPackages" class="packages-grid">
+                <div class="loading-spinner">جاري تحميل الباقات...</div>
             </div>
         </div>
 
-        <!-- GB Packages Section -->
         <div class="packages-section">
-            <div class="section-title">
-                📦 باقات الجيجابايت
-            </div>
-            <div class="packages-grid">
-                <div class="package-card">
-                    <div class="package-title">باقة 1 جيجا</div>
-                    <div class="package-duration">1 جيجابايت لمدة 7 أيام</div>
-                    <div class="package-price">0.500 <span class="currency">ريال</span></div>
-                    <button class="order-btn" onclick="openModal('باقة 1 جيجا - 7 أيام', '0.500 ريال')">طلب الآن</button>
-                </div>
-
-                <div class="package-card">
-                    <div class="package-title">باقة 20 جيجا</div>
-                    <div class="package-duration">20 جيجابايت لمدة شهر كامل</div>
-                    <div class="package-price">5.500 <span class="currency">ريال</span></div>
-                    <button class="order-btn" onclick="openModal('باقة 20 جيجا - شهر كامل', '5.500 ريال')">طلب الآن</button>
-                </div>
+            <div class="section-title">باقات الجيجابايت</div>
+            <div id="gbPackages" class="packages-grid">
+                <div class="loading-spinner">جاري تحميل الباقات...</div>
             </div>
         </div>
     </div>
-
-    <!-- Order Modal -->
-    <div id="orderModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">&times;</span>
-            <h2>تأكيد الطلب</h2>
-            
-            <div class="selected-package" id="selectedPackage">
-                <!-- Package details will be inserted here -->
-            </div>
-
-            <form id="orderForm">
-                <div class="form-group">
-                    <label for="customerName">الاسم الكامل *</label>
-                    <input type="text" id="customerName" name="customerName" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="customerEmail">البريد الإلكتروني <span class="optional">(اختياري)</span></label>
-                    <input type="email" id="customerEmail" name="customerEmail">
-                </div>
-
-                <div class="form-group">
-                    <label for="customerPhone">رقم الهاتف *</label>
-                    <input type="tel" id="customerPhone" name="customerPhone" required>
-                </div>
-
-                <button type="submit" class="pay-btn">
-                    💳 دفع عبر واتساب
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        let selectedPackageName = '';
-        let selectedPackagePrice = '';
-
-        function openModal(packageName, packagePrice) {
-            selectedPackageName = packageName;
-            selectedPackagePrice = packagePrice;
-            
-            document.getElementById('selectedPackage').innerHTML = `
-                <h3>${packageName}</h3>
-                <p style="font-size: 1.2rem; font-weight: bold; color: #667eea;">${packagePrice}</p>
-            `;
-            
-            document.getElementById('orderModal').style.display = 'block';
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeModal() {
-            document.getElementById('orderModal').style.display = 'none';
-            document.body.style.overflow = 'auto';
-            document.getElementById('orderForm').reset();
-        }
-
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('orderModal');
-            if (event.target == modal) {
-                closeModal();
-            }
-        }
-
-        // Form submission
-        document.getElementById('orderForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const name = document.getElementById('customerName').value.trim();
-            const email = document.getElementById('customerEmail').value.trim();
-            const phone = document.getElementById('customerPhone').value.trim();
-            
-            if (!name || !phone) {
-                alert('يرجى ملء جميع الحقول المطلوبة');
-                return;
-            }
-
-            // Validate phone number (basic validation)
-            const phoneRegex = /^[0-9+\-\s()]+$/;
-            if (!phoneRegex.test(phone)) {
-                alert('يرجى إدخال رقم هاتف صحيح');
-                return;
-            }
-
-            // Create WhatsApp message
-            const message = createWhatsAppMessage(name, email, phone, selectedPackageName, selectedPackagePrice);
-            
-            // Show loading state
-            const submitBtn = document.querySelector('.pay-btn');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<span class="loading"></span> جاري التحويل...';
-            submitBtn.disabled = true;
-            
-            // Redirect to WhatsApp after a short delay
-            setTimeout(() => {
-                window.open(`https://wa.me/96879470467?text=${encodeURIComponent(message)}`, '_blank');
-                
-                // Reset button
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-                
-                // Close modal
-                closeModal();
-            }, 1500);
-        });
-
-        function createWhatsAppMessage(name, email, phone, packageName, packagePrice) {
-            let message = `🌐 *طلب جديد - متجر الشرائح الإلكترونية*\n\n`;
-            message += `👤 *اسم العميل:* ${name}\n`;
-            message += `📱 *رقم الهاتف:* ${phone}\n`;
-            
-            if (email) {
-                message += `📧 *البريد الإلكتروني:* ${email}\n`;
-            }
-            
-            message += `\n📦 *تفاصيل الباقة:*\n`;
-            message += `• ${packageName}\n`;
-            message += `• *السعر:* ${packagePrice}\n\n`;
-            message += `⏰ *وقت الطلب:* ${new Date().toLocaleString('ar-SA')}\n\n`;
-            message += `✅ *يرجى تأكيد الطلب وإرسال تفاصيل الدفع*`;
-            
-            return message;
-        }
-
-        // Add smooth scrolling for better UX
-        document.addEventListener('DOMContentLoaded', function() {
-            // Add entrance animation
-            const cards = document.querySelectorAll('.package-card');
-            cards.forEach((card, index) => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(30px)';
-                
-                setTimeout(() => {
-                    card.style.transition = 'all 0.6s ease';
-                    card.style.opacity = '1';
-                    card.style.transform = 'translateY(0)';
-                }, index * 100);
-            });
-        });
-
-        // Add keyboard support for modal
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeModal();
-            }
-        });
-    </script>
 </body>
 </html>
-
