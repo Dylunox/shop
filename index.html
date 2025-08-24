@@ -7,7 +7,7 @@
     
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js';
-        import { getDatabase, ref, onValue, off, push } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js';
+        import { getDatabase, ref, onValue, off } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyCy8qUFOMQ6Yg93fEMIYj6ofn8l_4p7AgI",
@@ -125,6 +125,7 @@
                 <div class="modal-content">
                     <h2>طلب الباقة</h2>
                     <input type="text" id="phoneNumber" placeholder="أدخل رقم الهاتف">
+                    <input type="email" id="emailAddress" placeholder="أدخل البريد الإلكتروني">
                     <div class="modal-buttons">
                         <button class="modal-btn" onclick="confirmOrder(${id}, '${title}', '${price}', '${type}')">تأكيد</button>
                         <button class="modal-btn cancel" onclick="this.closest('.modal').remove()">إلغاء</button>
@@ -134,35 +135,43 @@
             document.body.appendChild(modal);
         }
 
-        // تأكيد الطلب
+        // تأكيد الطلب وإرسال إلى واتساب
         window.confirmOrder = function(id, title, price, type) {
-            const phone = document.getElementById('phoneNumber').value;
+            const phone = document.getElementById('phoneNumber').value.trim();
+            const email = document.getElementById('emailAddress').value.trim();
+            
+            // التحقق من صحة رقم الهاتف
             if (!phone || !/^\d+$/.test(phone)) {
-                showToast('يرجى إدخال رقم هاتف صحيح', 'error');
+                showToast('يرجى إدخال رقم هاتف صحيح (أرقام فقط)', 'error');
                 return;
             }
             
-            const order = {
-                packageId: id,
-                packageTitle: title,
-                price: price,
-                phone: phone,
-                type: type,
-                status: 'pending',
-                timestamp: new Date().toISOString()
-            };
-            
+            // التحقق من صحة البريد الإلكتروني
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!email || !emailRegex.test(email)) {
+                showToast('يرجى إدخال بريد إلكتروني صحيح', 'error');
+                return;
+            }
+
+            // إنشاء رسالة الواتساب
+            const whatsappNumber = '+96879470467'; // استبدل بـ +966xxxxxxxxx
+            const message = `طلب جديد:\n` +
+                           `الباقة: ${title}\n` +
+                           `السعر: ${price} ريال\n` +
+                           `رقم الهاتف: ${phone}\n` +
+                           `البريد الإلكتروني: ${email}\n` +
+                           `النوع: ${type === 'unlimited' ? 'غير محدودة' : 'جيجابايت'}\n` +
+                           `معرف الباقة: ${id}`;
+            const encodedMessage = encodeURIComponent(message);
+            const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+
             try {
-                push(ref(database, 'orders'), order).then(() => {
-                    console.log('تم إرسال الطلب:', order);
-                    showToast('تم إرسال طلبك بنجاح! سيتم التواصل معك قريبًا.', 'success');
-                    document.querySelector('.modal').remove();
-                }).catch((error) => {
-                    console.error('خطأ في إرسال الطلب:', error);
-                    showToast('حدث خطأ في إرسال الطلب: ' + error.message, 'error');
-                });
+                // إعادة توجيه المستخدم إلى الواتساب
+                window.open(whatsappUrl, '_blank');
+                showToast('تم إرسال الطلب إلى واتساب بنجاح!', 'success');
+                document.querySelector('.modal').remove();
             } catch (error) {
-                console.error('خطأ في إرسال الطلب:', error);
+                console.error('خطأ في إرسال الطلب إلى واتساب:', error);
                 showToast('حدث خطأ في إرسال الطلب: ' + error.message, 'error');
             }
         }
